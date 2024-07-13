@@ -76,7 +76,7 @@ export default function Home() {
               marginTop={20}
               $base-flexDirection="column"
               $sm-flexDirection="row"
-              $md-flexDirection="flex-start"
+              $md-flexDirection="row"
             >
               <Text color="$white" fontWeight="$normal">
                 Get started by editing
@@ -94,8 +94,8 @@ export default function Home() {
                 px="$6"
                 marginTop="$5"
                 $base-flexDirection="column"
-                $sm-flexDirection="ro"
-                $md-flexDirection="flex-end"
+                $sm-flexDirection="row"
+                $md-flexDirection="row"
               >
                 <Text color="$white" fontWeight="$normal">
                   Explore Tab Navigation

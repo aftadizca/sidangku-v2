@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "expo-router-v3",
-    "slug": "expo-router-v3",
+    "name": "sidangku",
+    "slug": "sidangku",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -22,7 +22,8 @@
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
-      }
+      },
+      "package": "id.my.aftadw.sidangku"
     },
     "web": {
       "bundler": "metro",

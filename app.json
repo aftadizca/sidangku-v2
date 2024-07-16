@@ -38,7 +38,20 @@
           "microphonePermissionText": "$(PRODUCT_NAME) needs access to your Microphone."
         }
       ],
-      "expo-asset"
+      "expo-asset",
+      ["./manifest.plugin.js"],
+      ["./gradle-properties.plugin.js"],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "minSdkVersion": 32,
+            "compileSdkVersion": 34,
+            "targetSdkVersion": 34,
+            "buildToolsVersion": "34.0.0"
+          }
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

@@ -3,6 +3,7 @@ import {
   CameraPermissionRequestResult,
   runAtTargetFps,
   useCameraDevice,
+  useCameraFormat,
   useFrameProcessor,
   useSkiaFrameProcessor,
 } from "react-native-vision-camera";
@@ -10,13 +11,8 @@ import { useState, createRef, useEffect } from "react";
 import { Linking, StyleSheet, TouchableOpacity, View } from "react-native";
 import { Box, Text, Button } from "@gluestack-ui/themed";
 import { router } from "expo-router";
-import { useSharedValue } from "react-native-reanimated";
-import {
-  TensorflowModel,
-  TensorflowPlugin,
-  loadTensorflowModel,
-  useTensorflowModel,
-} from "react-native-fast-tflite";
+import { useSharedValue } from "react-native-worklets-core";
+import { TensorflowModel, loadTensorflowModel } from "react-native-fast-tflite";
 
 import { Asset, useAssets } from "expo-asset";
 import { useResizePlugin } from "vision-camera-resize-plugin";
@@ -30,37 +26,67 @@ export default function CameraPage() {
     "3": "Nakula/Sadewa",
   };
 
-  const emojiFont = useFont(
-    require("../assets/fonts/SpaceMono-Regular.ttf"),
-    18
-  );
-
-  const [permission, setPermission] =
-    useState<CameraPermissionRequestResult>("denied");
+  const labelFont = useFont(require("../assets/fonts/AdventPro-Bold.ttf"), 24);
+  //set up camera
+  const [permission, setPermission] = useState<CameraPermissionRequestResult>();
   const device = useCameraDevice("back");
+  const format = useCameraFormat(device, [
+    { photoAspectRatio: 16 / 9 },
+    { photoResolution: { width: 1280, height: 720 } },
+    { videoAspectRatio: 16 / 9 },
+    { videoResolution: { width: 1280, height: 720 } },
+  ]);
   const [model, setModel] = useState("");
   const [tfLite, setTFLite] = useState<TensorflowModel>();
-
-  // const nameWayang = useSharedValue("");
+  const nameWayang = useSharedValue<{ name: string; confident: string }>({
+    name: "",
+    confident: "",
+  });
 
   const { resize } = useResizePlugin();
 
-  const frameProcessor = useSkiaFrameProcessor(
-    (frame) => {
+  const frameProcessor = useSkiaFrameProcessor((frame) => {
+    "worklet";
+
+    if (!tfLite) return;
+    if (labelFont === null) return;
+
+    frame.render();
+
+    frame.restore();
+
+    const rectX = frame.height / 2;
+    const rectY = frame.width - 100;
+    const rectW = 200;
+    const rectH = 50;
+
+    const rect = Skia.XYWHRect(rectX - rectW / 2, rectY, rectW, rectH);
+    const rrect = Skia.RRectXY(rect, 100, 100);
+
+    const paint = Skia.Paint();
+    paint.setColor(Skia.Color("blue"));
+
+    // draw text background ( rounded rect )
+    nameWayang.value.name && frame.drawRRect(rrect, paint);
+
+    const text = nameWayang.value.name + " - " + nameWayang.value.confident;
+
+    const measureText = labelFont.measureText(text);
+    paint.setColor(Skia.Color("white"));
+
+    //draw label
+    nameWayang.value.name &&
+      frame.drawText(
+        text,
+        rect.x + rectW / 2 - measureText.width / 2,
+        rect.y + rectH / 2 + measureText.height / 3,
+        paint,
+        labelFont
+      );
+
+    // running inference at x fps
+    runAtTargetFps(1, () => {
       "worklet";
-
-      if (!tfLite) return;
-      if (emojiFont === null) return;
-
-      const frameWidth = frame.width - 40;
-      const frameHeight = frame.height / 2;
-
-      frame.render();
-      const paint = Skia.Paint();
-      paint.setColor(Skia.Color("red"));
-
-      // runAtTargetFps(1, () => {
-      //   "worklet";
 
       const resized = resize(frame, {
         scale: {
@@ -72,56 +98,21 @@ export default function CameraPage() {
       });
       const outputs = tfLite.runSync([resized]);
 
-      frame.rotate(270, frameWidth, frameHeight);
-
       for (let key in outputs[0]) {
-        if (outputs[0][key] > 0.8 && key !== "4") {
-          frame.drawText(
-            wayang[key as keyof typeof wayang],
-            frameWidth,
-            frameHeight,
-            paint,
-            emojiFont
-          );
-
-          console.log(
-            wayang[key as keyof typeof wayang] + ": " + outputs[0][key]
-          );
+        const confidence = parseFloat(outputs[0][key].toString());
+        if (confidence > 0.85) {
+          console.log(key, confidence);
+          if (key !== "4") {
+            nameWayang.value.name = wayang[key as keyof typeof wayang];
+            nameWayang.value.confident = confidence.toFixed(2);
+          } else {
+            nameWayang.value.name = "";
+            nameWayang.value.confident = "";
+          }
         }
       }
-      // });
-      // console.log(frameWidth, frameHeight);
-
-      // console.log("font ready");
-    },
-    [tfLite]
-  );
-
-  // const frameProcessor = useFrameProcessor(
-  //   (frame) => {
-  //     "worklet";
-
-  //     if (!tfLite) return;
-
-  //     const resized = resize(frame, {
-  //       scale: {
-  //         width: 128,
-  //         height: 128,
-  //       },
-  //       pixelFormat: "rgb",
-  //       dataType: "float32",
-  //     });
-  //     const outputs = tfLite.runSync([resized]);
-
-  //     for (let key in outputs[0]) {
-  //       if (outputs[0][key] > 0.8 && key !== "4") {
-  //         nameWayang.value = wayang[key as keyof typeof wayang];
-  //         console.log(key + ": " + outputs[0][key]);
-  //       }
-  //     }
-  //   },
-  //   [tfLite]
-  // );
+    });
+  }, []);
 
   useEffect(() => {
     (async () => {
@@ -193,36 +184,30 @@ export default function CameraPage() {
 
   if (device == null) return <View />;
 
-  //   const onCameraReady = () => {
-  //     console.log("camera ready");
-  //     setCameraReady(true);
-  //   };
-
-  //   const takePicture = async () => {
-  //     const img = await cameraRef.current?.takePictureAsync();
-  //     if (img?.uri) {
-  //       const imgResize = await manipulateAsync(img.uri, [
-  //         { resize: { width: 128, height: 128 } },
-  //       ]);
-
-  //       console.log("resize", imgResize.base64);
-
-  //       router.push({
-  //         pathname: "/image-view",
-  //         params: { uri: img.uri },
-  //       });
-  //     }
-  //   };
-
   return (
-    <Box style={styles.container}>
+    <Box
+      flex={1}
+      justifyContent="center"
+      alignContent="center"
+      backgroundColor="$black"
+    >
       <Camera
         frameProcessor={frameProcessor}
         isActive={true}
         device={device}
-        outputOrientation="preview"
+        resizeMode="contain"
+        format={format}
         style={StyleSheet.absoluteFill}
       ></Camera>
+      <Text
+        zIndex={1000}
+        position="absolute"
+        bottom={0}
+        textAlign="center"
+        width="$full"
+      >
+        Test dsd dsd sfdsdsds s dsd {nameWayang.value.name}
+      </Text>
     </Box>
   );
 }
@@ -230,7 +215,7 @@ export default function CameraPage() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    justifyContent: "center",
+    justifyContent: "flex-end",
   },
   camera: {
     flex: 1,

@@ -9,24 +9,34 @@ import {
 } from "react-native-vision-camera";
 import { useState, createRef, useEffect } from "react";
 import { Linking, StyleSheet, TouchableOpacity, View } from "react-native";
-import { Box, Text, Button } from "@gluestack-ui/themed";
-import { router } from "expo-router";
+import { Box, Text, Button, VStack, Icon, HStack } from "@gluestack-ui/themed";
 import { useSharedValue } from "react-native-worklets-core";
-import { TensorflowModel, loadTensorflowModel } from "react-native-fast-tflite";
+import {
+  TensorflowModel,
+  loadTensorflowModel,
+  useTensorflowModel,
+} from "react-native-fast-tflite";
 
 import { Asset, useAssets } from "expo-asset";
 import { useResizePlugin } from "vision-camera-resize-plugin";
 import { Skia, useFont } from "@shopify/react-native-skia";
+import Gradient from "@/assets/Icons/Gradient";
+import Flashlight from "@/assets/Icons/Flash";
+
+interface IWayang {
+  [key: string]: string;
+}
 
 export default function CameraPage() {
-  const wayang = {
+  const wayang: IWayang = {
     "0": "Arjuna",
     "1": "Bima",
     "2": "Yudistira",
     "3": "Nakula/Sadewa",
+    "4": "Other",
   };
 
-  const labelFont = useFont(require("../assets/fonts/AdventPro-Bold.ttf"), 24);
+  const labelFont = useFont(require("@/assets/fonts/AdventPro-Bold.ttf"), 32);
   //set up camera
   const [permission, setPermission] = useState<CameraPermissionRequestResult>();
   const device = useCameraDevice("back");
@@ -37,7 +47,8 @@ export default function CameraPage() {
     { videoResolution: { width: 1280, height: 720 } },
   ]);
   const [model, setModel] = useState("");
-  const [tfLite, setTFLite] = useState<TensorflowModel>();
+  // const [tfLite, setTFLite] = useState<TensorflowModel>();
+  const tfLite = useTensorflowModel(require("@/assets/model/model.tflite"));
   const nameWayang = useSharedValue<{ name: string; confident: string }>({
     name: "",
     confident: "",
@@ -45,126 +56,99 @@ export default function CameraPage() {
 
   const { resize } = useResizePlugin();
 
-  const frameProcessor = useSkiaFrameProcessor((frame) => {
-    "worklet";
-
-    if (!tfLite) return;
-    if (labelFont === null) return;
-
-    frame.render();
-
-    frame.restore();
-
-    const rectX = frame.height / 2;
-    const rectY = frame.width - 100;
-    const rectW = 200;
-    const rectH = 50;
-
-    const rect = Skia.XYWHRect(rectX - rectW / 2, rectY, rectW, rectH);
-    const rrect = Skia.RRectXY(rect, 100, 100);
-
-    const paint = Skia.Paint();
-    paint.setColor(Skia.Color("blue"));
-
-    // draw text background ( rounded rect )
-    nameWayang.value.name && frame.drawRRect(rrect, paint);
-
-    const text = nameWayang.value.name + " - " + nameWayang.value.confident;
-
-    const measureText = labelFont.measureText(text);
-    paint.setColor(Skia.Color("white"));
-
-    //draw label
-    nameWayang.value.name &&
-      frame.drawText(
-        text,
-        rect.x + rectW / 2 - measureText.width / 2,
-        rect.y + rectH / 2 + measureText.height / 3,
-        paint,
-        labelFont
-      );
-
-    // running inference at x fps
-    runAtTargetFps(1, () => {
+  const frameProcessor = useSkiaFrameProcessor(
+    (frame) => {
       "worklet";
 
-      const resized = resize(frame, {
-        scale: {
-          width: 128,
-          height: 128,
-        },
-        pixelFormat: "rgb",
-        dataType: "float32",
-      });
-      const outputs = tfLite.runSync([resized]);
+      if (tfLite.state !== "loaded") return;
+      if (labelFont === null) return;
 
-      for (let key in outputs[0]) {
-        const confidence = parseFloat(outputs[0][key].toString());
-        if (confidence > 0.85) {
-          console.log(key, confidence);
-          if (key !== "4") {
-            nameWayang.value.name = wayang[key as keyof typeof wayang];
-            nameWayang.value.confident = confidence.toFixed(2);
-          } else {
-            nameWayang.value.name = "";
-            nameWayang.value.confident = "";
+      frame.render();
+
+      frame.restore();
+
+      const rectX = frame.height / 2;
+      const rectY = frame.width - 200;
+      const rectW = 300;
+      const rectH = 70;
+
+      const rect = Skia.XYWHRect(rectX - rectW / 2, rectY, rectW, rectH);
+      const rrect = Skia.RRectXY(rect, 100, 100);
+
+      const paint = Skia.Paint();
+      paint.setColor(Skia.Color("blue"));
+
+      // draw text background ( rounded rect )
+      nameWayang.value.name && frame.drawRRect(rrect, paint);
+
+      const text = nameWayang.value.name + " - " + nameWayang.value.confident;
+
+      const measureText = labelFont.measureText(text);
+      paint.setColor(Skia.Color("white"));
+
+      //draw label
+      nameWayang.value.name &&
+        frame.drawText(
+          text,
+          rect.x + rectW / 2 - measureText.width / 2,
+          rect.y + rectH / 2 + measureText.height / 3,
+          paint,
+          labelFont
+        );
+
+      // running inference at x fps
+      runAtTargetFps(1, () => {
+        "worklet";
+
+        // console.log(tfLite.model.delegate);
+        // console.log(tfLite.model.inputs);
+
+        const resized = resize(frame, {
+          scale: {
+            width: 224,
+            height: 224,
+          },
+          pixelFormat: "rgb",
+          dataType: "float32",
+        });
+        const outputs = tfLite.model.runSync([resized]);
+
+        console.log(outputs);
+
+        const n: [string, number] = Object.entries(outputs[0]).reduce(
+          ([kp, vp], [kn, vn]) => {
+            return vn && vn > vp ? [kn, vn] : [kp, vp];
           }
-        }
-      }
-    });
-  }, []);
+        );
 
+        // console.log("n:", n);
+
+        // if (n[1] < 0.5) {
+        //   // console.log("under", n);
+        //   nameWayang.value.name = "";
+        //   nameWayang.value.confident = "";
+        // }
+
+        if (n[0] !== "4") {
+          // console.log("upper", n);
+          nameWayang.value.name = wayang[n[0]];
+          nameWayang.value.confident = n[1].toFixed(2);
+        } else {
+          nameWayang.value.name = "";
+          nameWayang.value.confident = "";
+        }
+      });
+    },
+    [tfLite]
+  );
+
+  // set camera permission
   useEffect(() => {
     (async () => {
       const hasPermission = await Camera.requestCameraPermission();
       setPermission(hasPermission);
     })();
   }, []);
-
-  useEffect(() => {
-    const LoadAsset = async () => {
-      try {
-        const m = await Asset.fromModule(
-          require("../assets/model/model.tflite")
-        ).downloadAsync();
-        return m;
-      } catch (error) {
-        console.log(error);
-      }
-    };
-
-    console.log("downloading model");
-
-    LoadAsset().then((x) => {
-      if (x?.downloaded && x.uri) {
-        setModel(x.uri);
-        console.log("model downloaded");
-      }
-    });
-  }, []);
-
-  useEffect(() => {
-    const LoadModel = async () => {
-      const loadedModel = await loadTensorflowModel(
-        {
-          url: model,
-        },
-        "android-gpu"
-      );
-
-      return loadedModel;
-    };
-    if (model.length !== 0) {
-      LoadModel().then((x) => {
-        console.log("loading");
-        setTFLite(x);
-        console.log("model loaded");
-        console.log("model inputs:", x.inputs);
-      });
-    }
-  }, [model]);
-
-  //   let cameraRef = createRef<CameraView>();
 
   if (!permission) {
     // Camera permissions are still loading.
@@ -185,29 +169,33 @@ export default function CameraPage() {
   if (device == null) return <View />;
 
   return (
-    <Box
-      flex={1}
-      justifyContent="center"
-      alignContent="center"
-      backgroundColor="$black"
-    >
+    <Box flex={1}>
+      <Gradient />
       <Camera
         frameProcessor={frameProcessor}
         isActive={true}
-        device={device}
         resizeMode="contain"
+        device={device}
         format={format}
-        style={StyleSheet.absoluteFill}
+        fps={30}
+        style={styles.camera}
       ></Camera>
-      <Text
-        zIndex={1000}
+      <HStack
+        zIndex={2000}
+        space="md"
+        flex={1}
+        alignItems="center"
+        justifyContent="center"
         position="absolute"
-        bottom={0}
-        textAlign="center"
-        width="$full"
+        right={5}
+        bottom={10}
+        left={5}
       >
-        Test dsd dsd sfdsdsds s dsd {nameWayang.value.name}
-      </Text>
+        <Icon as={Flashlight} width={48} height={48} color="$blue900" />
+        {/* <Icon as={Flashlight} size="lg" />
+        <Icon as={Flashlight} size="lg" />
+        <Icon as={Flashlight} size="lg" /> */}
+      </HStack>
     </Box>
   );
 }
@@ -218,7 +206,11 @@ const styles = StyleSheet.create({
     justifyContent: "flex-end",
   },
   camera: {
-    flex: 1,
+    position: "absolute",
+    top: 0,
+    bottom: 0,
+    left: -1,
+    right: 0,
   },
   buttonContainer: {
     flex: 1,

@@ -12,3 +12,6 @@
 -keep class com.facebook.react.turbomodule.** { *; }
 
 # Add any project specific keep options here:
+
+# -keep class org.tensorflow.lite.gpu.** { *; }
+# -keep class org.tensorflow.lite.gpu..** { *; }

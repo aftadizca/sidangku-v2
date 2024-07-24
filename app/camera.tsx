@@ -4,24 +4,26 @@ import {
   runAtTargetFps,
   useCameraDevice,
   useCameraFormat,
-  useFrameProcessor,
   useSkiaFrameProcessor,
 } from "react-native-vision-camera";
-import { useState, createRef, useEffect } from "react";
-import { Linking, StyleSheet, TouchableOpacity, View } from "react-native";
-import { Box, Text, Button, VStack, Icon, HStack } from "@gluestack-ui/themed";
-import { useSharedValue } from "react-native-worklets-core";
+import { useState, useEffect } from "react";
+import { Linking, StyleSheet, View } from "react-native";
 import {
-  TensorflowModel,
-  loadTensorflowModel,
-  useTensorflowModel,
-} from "react-native-fast-tflite";
+  Box,
+  Text,
+  Button,
+  Icon,
+  HStack,
+  Pressable,
+} from "@gluestack-ui/themed";
+import { useSharedValue } from "react-native-worklets-core";
+import { useTensorflowModel } from "react-native-fast-tflite";
 
-import { Asset, useAssets } from "expo-asset";
 import { useResizePlugin } from "vision-camera-resize-plugin";
 import { Skia, useFont } from "@shopify/react-native-skia";
 import Gradient from "@/assets/Icons/Gradient";
-import Flashlight from "@/assets/Icons/Flash";
+import FlashOn from "@/assets/Icons/FlashOn";
+import FlashOff from "@/assets/Icons/FlashOff";
 
 interface IWayang {
   [key: string]: string;
@@ -35,10 +37,10 @@ export default function CameraPage() {
     "3": "Nakula/Sadewa",
     "4": "Other",
   };
-
   const labelFont = useFont(require("@/assets/fonts/AdventPro-Bold.ttf"), 32);
   //set up camera
   const [permission, setPermission] = useState<CameraPermissionRequestResult>();
+  const [flashlight, setFlashlight] = useState(false);
   const device = useCameraDevice("back");
   const format = useCameraFormat(device, [
     { photoAspectRatio: 16 / 9 },
@@ -46,7 +48,6 @@ export default function CameraPage() {
     { videoAspectRatio: 16 / 9 },
     { videoResolution: { width: 1280, height: 720 } },
   ]);
-  const [model, setModel] = useState("");
   // const [tfLite, setTFLite] = useState<TensorflowModel>();
   const tfLite = useTensorflowModel(require("@/assets/model/model.tflite"));
   const nameWayang = useSharedValue<{ name: string; confident: string }>({
@@ -168,9 +169,13 @@ export default function CameraPage() {
 
   if (device == null) return <View />;
 
+  const handleFlashlight = () => {
+    setFlashlight(!flashlight);
+  };
+
   return (
-    <Box flex={1}>
-      <Gradient />
+    <Box flex={1} backgroundColor="$black">
+      {/* <Gradient /> */}
       <Camera
         frameProcessor={frameProcessor}
         isActive={true}
@@ -179,6 +184,7 @@ export default function CameraPage() {
         format={format}
         fps={30}
         style={styles.camera}
+        torch={flashlight ? "on" : "off"}
       ></Camera>
       <HStack
         zIndex={2000}
@@ -191,7 +197,15 @@ export default function CameraPage() {
         bottom={10}
         left={5}
       >
-        <Icon as={Flashlight} width={48} height={48} color="$blue900" />
+        <Pressable onPress={handleFlashlight}>
+          <Icon
+            as={flashlight ? FlashOn : FlashOff}
+            width={32}
+            height={32}
+            color="$white"
+            stroke="$white"
+          />
+        </Pressable>
         {/* <Icon as={Flashlight} size="lg" />
         <Icon as={Flashlight} size="lg" />
         <Icon as={Flashlight} size="lg" /> */}
